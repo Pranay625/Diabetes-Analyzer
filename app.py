@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 import shap
 import matplotlib.pyplot as plt
+import os
+import subprocess  # For auto-training on deploy
 
 # Page config
 st.set_page_config(page_title="Diabetes Risk Analyzer", page_icon="🩸", layout="centered")
@@ -80,48 +82,52 @@ st.markdown("""
         color: #ff6b6b !important;
     }
     
-    /* --- FIX: Matplotlib toolbar buttons (Fullscreen, Reset, Download, etc.) --- */
-    /* Full black background for toolbar */
+    /* Matplotlib toolbar buttons fix */
     .matplotlib-toolbar, .mpl-toolbar {
         background-color: #000000 !important;
     }
-    
-    /* Black background for all toolbar buttons */
     .mpl-toolbar button, button.matplotlib-button {
         background-color: #000000 !important;
         color: #ffffff !important;
         border: none !important;
     }
-    
-    /* Hover effect */
-    .mpl-toolbar button:hover, button.matplotlib-button:hover {
+    .mpl-toolbar button:hover {
         background-color: #222222 !important;
     }
-    
-    /* Tooltip (Fullscreen label) - black with white text */
     .mpl-tooltip {
         background-color: #000000 !important;
         color: #ffffff !important;
         border: 1px solid #444444 !important;
     }
-    
-    /* Icons inside buttons - ensure white */
     .mpl-toolbar svg, .mpl-toolbar path {
         fill: #ffffff !important;
     }
     
-    /* Plot background */
     figure, .js-plotly-plot {
         background-color: #000000 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Load model and scaler
+# Load model with auto-training if files are missing (for Streamlit Cloud)
 @st.cache_resource
 def load_model():
-    scaler = joblib.load('models/scaler.pkl')
-    model = joblib.load('models/xgboost_model.json')
+    model_path = 'models/xgboost_model.json'
+    scaler_path = 'models/scaler.pkl'
+    
+    if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+        st.info("🛠️ First time setup: Training the model... (this takes 10-30 seconds)")
+        with st.spinner("Training XGBoost model..."):
+            result = subprocess.run(['python', 'src/train_model.py'], capture_output=True, text=True)
+            if result.returncode != 0:
+                st.error("Model training failed! See details below:")
+                st.code(result.stderr)
+                st.stop()
+            else:
+                st.success("Model trained and ready!")
+    
+    scaler = joblib.load(scaler_path)
+    model = joblib.load(model_path)
     return scaler, model
 
 scaler, model = load_model()
@@ -188,10 +194,10 @@ if st.sidebar.button("🔍 Predict My Risk", use_container_width=True):
     st.write(f"**Probability of Diabetes:** {probability:.1%}")
     st.write(f"**Risk Level:** {risk_level}")
     
-    # Patient-Friendly Explanations
+    # Explanations Header
     st.markdown("<h2 style='color: #ffffff; margin-bottom: 0;'>🔍 Why This Prediction?</h2>", unsafe_allow_html=True)
     
-    # Graph 1 Explanation
+    # Graph 1: SHAP Waterfall
     st.markdown("""
         <div style='font-size: 1.4rem; font-weight: bold; margin: 20px 0 10px 0;'>
         1. How each of your values affects the risk
@@ -205,7 +211,6 @@ if st.sidebar.button("🔍 Predict My Risk", use_container_width=True):
     shap_values = explainer.shap_values(input_scaled)
     feature_names = df_input.columns.tolist()
     
-    # Dark theme for SHAP plot
     plt.rcParams['figure.facecolor'] = '#000000'
     plt.rcParams['axes.facecolor'] = '#000000'
     plt.rcParams['text.color'] = 'white'
@@ -226,7 +231,7 @@ if st.sidebar.button("🔍 Predict My Risk", use_container_width=True):
     plt.tight_layout()
     st.pyplot(fig1, bbox_inches='tight')
     
-    # Graph 2 Explanation
+    # Graph 2: Comparison Bar Chart
     st.markdown("""
         <div style='font-size: 1.4rem; font-weight: bold; margin: 40px 0 10px 0;'>
         2. How your values compare to average people in the study
