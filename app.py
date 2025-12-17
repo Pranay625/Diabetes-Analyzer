@@ -190,7 +190,6 @@ if st.sidebar.button("🔍 Predict My Risk", use_container_width=True):
     
     # Patient-Friendly Explanations
     st.markdown("<h2 style='color: #ffffff; margin-bottom: 0;'>🔍 Why This Prediction?</h2>", unsafe_allow_html=True)
-    st.markdown("<h4 style='color: #888888; margin-top: 5px; font-weight: normal;'>?</h4>", unsafe_allow_html=True)
     
     # Graph 1 Explanation
     st.markdown("""
